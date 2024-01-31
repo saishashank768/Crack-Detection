@@ -1,42 +1,54 @@
-import streamlit as st
-import tensorflow as tf
+!pip install streamlit
+st.markdown('<h1 style="color:black;">Vgg 16 Image classification model</h1>', unsafe_allow_html=True)
+st.markdown('<h2 style="color:gray;">The image classification model classifies image into following categories:</h2>', unsafe_allow_html=True)
+st.markdown('<h3 style="color:gray;"> Diagonal,  Horizontal, Structural, Vertical,</h3>', unsafe_allow_html=True)
+!streamlit run filename.py
+# background image to streamlit
 
-st.set_option('deprecation.showfileUploaderEncoding',False)
 @st.cache(allow_output_mutation=True)
-def load_model():
-  model=tf.keras.models.load_model('/content/saved_models/my_model1.hdf5')
-  model=tf.keras.models.load_model('/content/saved_models/my_model2.hdf5')
-  model=tf.keras.models.load_model('/content/saved_models/my_model3.hdf5')
-  model=tf.keras.models.load_model('/content/saved_models/my_model4.hdf5')
-  model=tf.keras.models.load_model('/content/saved_models/my_model5.hdf5')
-  return model
- model=load_model()
- st.write("""
-         #Crack Detection
-         """
-         )
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
 
-file = st.file_uploader("please upload an crack image", type=["jpg", "png"])
-import cv2
-import PIL import Image, ImageOps
-import numpy as np
-def import_and_predict(image_data, model):
+def set_png_as_page_bg(png_file):
+    bin_str = get_base64_of_bin_file(png_file) 
+    page_bg_img = '''
+    <style>
+    .stApp {
+    background-image: url("data:image/png;base64,%s");
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: scroll; # doesn't work
+    }
+    </style>
+    ''' % bin_str
+    
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+    return
 
-size = (180,180)
-image = ImageOps.fit(image_data, size, Image.ANTIALIAS)
-img = np.asarray(image)
-img_reshape = img[np.newaxis,...]
-prediction = model.predict(img_reshape)
+set_png_as_page_bg('/content/background.webp')
+upload= st.file_uploader('Insert image for classification', type=['png','jpg'])
+c1, c2= st.columns(2)
+if upload is not None:
+  im= Image.open(upload)
+  img= np.asarray(im)
+  image= cv2.resize(img,(224, 224))
+  img= preprocess_input(image)
+  img= np.expand_dims(img, 0)
+  c1.header('Input Image')
+  c1.image(im)
+  c1.write(img.shape)
+  #load weights of the trained model.
+  input_shape = (224, 224, 3)
+  optim_1 = Adam(learning_rate=0.0001)
+  n_classes=4
+  vgg_model = model(input_shape, n_classes, optim_1, fine_tune=2)
+  vgg_model.load_weights('/content/drive/MyDrive/vgg/tune_model19.weights.best.hdf5')
 
-return prediction
-
-if file is None:
-st.text("please upload an image file")
-else:
-image = Image.open(file)
-st.image(image,use_column_width=True)
-predictions = import_and_predict(image, model)
-class names['diagonal','horizontal','structural','vertical']
-string="This image most likely is:"+class_names[np.argmax(predictions)]
-st.success(string)
-
+  # prediction on model
+  vgg_preds = vgg_model.predict(img)
+  vgg_pred_classes = np.argmax(vgg_preds, axis=1)
+  c2.header('Output')
+  c2.subheader('Predicted class :')
+  c2.write(classes[vgg_pred_classes[0]] )
