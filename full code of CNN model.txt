@@ -1,0 +1,244 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+%matplotlib inline
+
+import cv2
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+import warnings
+warnings.filterwarnings('ignore')
+
+from sklearn.metrics import confusion_matrix, classification_report
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Activation, BatchNormalization, Conv2D, Dense, Dropout, Flatten, MaxPooling2D
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.losses import CategoricalCrossentropy
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
+import zipfile
+import os
+
+# Provide the path to your zip file
+zip_file_path = "/content/cracks dataset-20231210T171550Z-001.zip"
+
+# Provide the directory where you want to extract the contents
+extracted_dir_path = "/content/sample_data"
+
+# Create the target directory if it doesn't exist
+os.makedirs(extracted_dir_path, exist_ok=True)
+
+# Create a ZipFile object
+with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+    # Extract all the contents into the specified directory
+    zip_ref.extractall(extracted_dir_path)
+
+# Print a message indicating the extraction is complete
+print("Extraction complete.")
+
+train_dataset_path = '/content/sample_data/cracks dataset-20231210T171550Z-001/cracks dataset/TRAIN DATA IMAGES'
+validation_dataset_path = '/content/sample_data/cracks dataset-20231210T171550Z-001/cracks dataset/TEST DATA IMAGES'
+
+IMG_WIDTH = 150
+IMG_HEIGHT = 150
+BATCH_SIZE = 32
+
+train_datagen = ImageDataGenerator(rescale=1.0/255,
+                                  zoom_range=0.2,
+                                  width_shift_range=0.2,
+                                  height_shift_range=0.2,
+                                  fill_mode='nearest')
+train_generator = train_datagen.flow_from_directory(train_dataset_path,
+                                                   target_size=(IMG_WIDTH, IMG_HEIGHT),
+                                                   batch_size=BATCH_SIZE,
+                                                   class_mode='categorical',
+                                                   shuffle=True)
+
+validation_datagen = ImageDataGenerator(rescale=1.0/255)
+validation_generator = validation_datagen.flow_from_directory(validation_dataset_path,
+                                                             target_size=(IMG_WIDTH, IMG_HEIGHT),
+                                                             batch_size=BATCH_SIZE,
+                                                             class_mode='categorical',
+                                                             shuffle=True)
+
+labels = {value: key for key, value in train_generator.class_indices.items()}
+
+print("Label Mappings for classes present in the training and validation datasets\n")
+for key, value in labels.items():
+    print(f"{key} : {value}")
+
+fig, ax = plt.subplots(nrows=2, ncols=5, figsize=(15, 12))
+idx = 0
+
+for i in range(2):
+    for j in range(5):
+        label = labels[np.argmax(train_generator[0][1][idx])]
+        ax[i, j].set_title(f"{label}")
+        ax[i, j].imshow(train_generator[0][0][idx][:, :, :])
+        ax[i, j].axis("off")
+        idx += 1
+
+plt.tight_layout()
+plt.suptitle("Sample Training Images", fontsize=21)
+plt.show()
+
+def create_model():
+    model = Sequential([
+        Conv2D(filters=128, kernel_size=(5, 5), padding='valid', input_shape=(IMG_WIDTH, IMG_HEIGHT, 3)),
+        Activation('relu'),
+        MaxPooling2D(pool_size=(2, 2)),
+        BatchNormalization(),
+        
+        Conv2D(filters=64, kernel_size=(3, 3), padding='valid', kernel_regularizer=l2(0.00005)),
+        Activation('relu'),
+        MaxPooling2D(pool_size=(2, 2)),
+        BatchNormalization(),
+        
+        Conv2D(filters=32, kernel_size=(3, 3), padding='valid', kernel_regularizer=l2(0.00005)),
+        Activation('relu'),
+        MaxPooling2D(pool_size=(2, 2)),
+        BatchNormalization(),
+        
+        Flatten(),
+        
+        Dense(units=256, activation='relu'),
+        Dropout(0.5),
+        Dense(units=6, activation='softmax')
+    ])
+    
+    return model
+
+cnn_model = create_model()
+print(cnn_model.summary())
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), patience=5)
+optimizer = Adam(learning_rate=0.001)
+
+cnn_model.compile(optimizer=optimizer, loss=CategoricalCrossentropy(), metrics=['accuracy'])
+import tensorflow as tf
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+
+# Load and preprocess the MNIST dataset
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+x_train = x_train.reshape((x_train.shape[0], 28, 28, 1)).astype('float32') / 255
+x_test = x_test.reshape((x_test.shape[0], 28, 28, 1)).astype('float32') / 255
+
+y_train = tf.keras.utils.to_categorical(y_train)
+y_test = tf.keras.utils.to_categorical(y_test)
+
+# Build a simple CNN model
+model = Sequential()
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)))
+model.add(MaxPooling2D((2, 2)))
+model.add(Flatten())
+model.add(Dense(64, activation='relu'))
+model.add(Dense(10, activation='softmax'))
+
+# Compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model with a specified number of epochs
+epochs = 10  # Adjust the number of epochs as needed
+history = model.fit(x_train, y_train, epochs=epochs, validation_data=(x_test, y_test), verbose=2)
+
+import matplotlib.pyplot as plt
+
+# Assuming you have already trained your model and have the history object
+# history = model.fit(...)
+
+# Plot training loss
+plt.plot(history.history['loss'], label='Training Loss')
+# Plot validation loss
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Check if 'lr' is present in the history keys before trying to access it
+if 'lr' in history.history:
+    # Plot learning rate
+    plt.plot(history.history['lr'], label='Learning Rate')
+    plt.title('Learning Rate')
+    plt.xlabel('Epoch')
+    plt.ylabel('Learning Rate')
+    plt.legend()
+    plt.show()
+    learning_rate = history.history['lr']
+else:
+    print("Learning rate information not available in the history.")
+fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(8, 6))
+
+ax[0].set_title('Training Accuracy vs. Epochs')
+ax[0].plot(train_accuracy, 'o-', label='Train Accuracy')
+ax[0].plot(val_accuracy, 'o-', label='Validation Accuracy')
+ax[0].set_xlabel('Epochs')
+ax[0].set_ylabel('Accuracy')
+ax[0].legend(loc='best')
+
+ax[1].set_title('Training/Validation Loss vs. Epochs')
+ax[1].plot(train_loss, 'o-', label='Train Loss')
+ax[1].plot(val_loss, 'o-', label='Validation Loss')
+ax[1].set_xlabel('Epochs')
+ax[1].set_ylabel('Loss')
+ax[1].legend(loc='best')
+
+
+plt.tight_layout()
+plt.show()
+
+test_dataset = '/content/sample_data/cracks dataset-20231210T171550Z-001/cracks dataset/TEST DATA IMAGES'
+
+test_datagen = ImageDataGenerator(rescale=1.0/255)
+
+test_generator = test_datagen.flow_from_directory(test_dataset,
+                                                 shuffle=False,
+                                                 batch_size=BATCH_SIZE,
+                                                 target_size = (IMG_WIDTH, IMG_HEIGHT),
+                                                 class_mode='categorical')   
+predictions = cnn_model.predict(test_generator)
+predicted_labels = np.argmax(predictions, axis=1)
+labels = ['diagonal images','horizontal images','structural images','vertical images']
+predicted_label = labels[np.argmax(predictions[i * test_generator.batch_size + j])]
+true_label = labels[np.argmax(labels[j])]
+
+class_names = ["diagonal images", "horizontal images", "structural images", "vertical images"]  # Replace with your actual class names
+
+predicted_index = np.argmax(predictions[i * test_generator.batch_size + j])
+true_index = np.argmax(labels[j])
+
+predicted_label = class_names[predicted_index]
+true_label = class_names[true_index]
+
+
+fig, ax = plt.subplots(nrows=2, ncols=5, figsize=(12, 10))
+num_samples = min(10, len(test_generator))
+class_names = ["diagonal images", "horizontal images", "structural images", "vertical images"]   # Replace with your actual class names
+
+for i in range(num_samples):
+    batch = test_generator[i]
+    images, labels = batch[0], batch[1]
+    
+    for j in range(min(images.shape[0], 5)):
+        predicted_index = np.argmax(predictions[i * test_generator.batch_size + j])
+        true_index = np.argmax(labels[j])
+
+        predicted_label = class_names[predicted_index]
+        true_label = class_names[true_index]
+
+        ax[i % 2, j].set_title(f"Predicted: {predicted_label}\nTrue: {true_label}")
+        ax[i % 2, j].imshow(images[j])
+        ax[i % 2, j].axis("off")
+
+plt.tight_layout()
+plt.suptitle("Test Dataset Predictions", fontsize=15)
+plt.show()
+y_pred = np.argmax(predictions, axis=1)
+y_true = test_generator.classes
+
