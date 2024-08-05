@@ -1,0 +1,102 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import LabelEncoder
+
+def load_data(uploaded_file):
+    df = pd.read_excel(uploaded_file)
+    return df
+
+def preprocess_sentiment(data):
+    if 'sentiment' not in data.columns:
+        raise KeyError("Missing required column: 'sentiment'")
+    
+    bins = [-np.inf, 0.3, 0.7, np.inf]
+    labels = ['Negative', 'Neutral', 'Positive']
+    data['sentiment_cat'] = pd.cut(data['sentiment'], bins=bins, labels=labels)
+    return data
+
+def train_sentiment_model(data):
+    if 'Review' not in data.columns or 'sentiment_cat' not in data.columns:
+        raise KeyError("Missing required columns: 'Review' and/or 'sentiment_cat'")
+
+    X = data['Review']
+    y = data['sentiment_cat']
+
+    vectorizer = TfidfVectorizer()
+    X = vectorizer.fit_transform(X)
+
+    model = LogisticRegression()
+    model.fit(X, y)
+    return model, vectorizer
+
+def train_recommendation_model(data):
+    if 'Rating' not in data.columns or 'Category' not in data.columns or 'Product' not in data.columns:
+        raise KeyError("Missing required columns: 'Rating', 'Category', and/or 'Product'")
+
+    X = data[['Rating', 'Category']]
+    y = data['Product']
+
+    X = pd.get_dummies(X)
+
+    model = RandomForestClassifier()
+    model.fit(X, y)
+    return model
+
+def predict_sentiment(model, vectorizer, review):
+    feature = vectorizer.transform([review])
+    prediction = model.predict(feature)
+    return prediction[0]
+
+def recommend_product(model, category, rating):
+    feature = pd.DataFrame([[rating, category]], columns=['Rating', 'Category'])
+    feature = pd.get_dummies(feature).reindex(columns=model.feature_names_in_, fill_value=0)
+    recommendation = model.predict(feature)
+    return recommendation[0]
+
+st.title("Sentiment Analysis and Product Recommendation")
+
+uploaded_file = st.file_uploader("Upload an Excel file", type="xlsx")
+
+if uploaded_file is not None:
+    try:
+        data = load_data(uploaded_file)
+        data = preprocess_sentiment(data)
+        st.write("Data loaded successfully:")
+        st.write(data.head())
+
+        # Training models
+        sentiment_model, vectorizer = train_sentiment_model(data)
+        recommendation_model = train_recommendation_model(data)
+
+        # Sentiment Analysis Section
+        st.header("Sentiment Analysis")
+        review_input = st.text_input("Enter a review:")
+        if st.button("Analyze Sentiment"):
+            sentiment = predict_sentiment(sentiment_model, vectorizer, review_input)
+            st.write(f"Sentiment: {sentiment}")
+
+        # Comment Analysis Section
+        st.header("Comment Analysis")
+        comment_input = st.text_area("Enter a comment:")
+        if st.button("Analyze Comment"):
+            comment_sentiment = predict_sentiment(sentiment_model, vectorizer, comment_input)
+            st.write(f"Comment Sentiment: {comment_sentiment}")
+
+        # Product Recommendation Section
+        st.header("Product Recommendation")
+        category_input = st.selectbox("Select a product category:", data['Category'].unique())
+        rating_input = st.slider("Select a rating:", 1, 5, 3)
+        if st.button("Recommend Product"):
+            recommendation = recommend_product(recommendation_model, category_input, rating_input)
+            st.write(f"Recommended Product: {recommendation}")
+
+    except KeyError as e:
+        st.error(f"Data Error: {e}")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
